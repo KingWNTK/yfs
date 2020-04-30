@@ -144,7 +144,7 @@ void print_tree(int rt, int pa, int depth) {
             continue;
         }
         for (i = 0; i < depth; i++) {
-            printf("_");
+            printf("-");
         }
         printf("%s nlink: %d\n", e->name, request_ic(e->inum)->data.nlink);
         if (e->inum != rt && e->inum != pa && request_ic(e->inum)->data.type == INODE_DIRECTORY) {
@@ -330,6 +330,7 @@ int add_dir_entry(int inode_id, int inum, char *name, int len) {
     if (!ok) {
         ret = append_dir_entry(inode_id, inum, name, len);
     }
+    printf("append ret: %d, len: %d, name: %.*s\n", ret, len, len, name);
     //return -1 if run out of blocks
     return ret;
 }
@@ -378,6 +379,7 @@ int remove_dir_entry(int inode_id, char *name, int len) {
                 wrote_iter(&iter);
 
                 ic_e->data.nlink--;
+                ic_e->dirty = 1;
 
                 if (ic_e->data.nlink == 0) {
                     clean_inode(ic_e->inode_id);
@@ -509,6 +511,7 @@ int read_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
     }
 
     ic_entry *ic_e = request_ic(inode_id);
+
     if (ic_e->data.size <= offset) {
         //offset exceed the file size
         return offset == ic_e->data.size ? 0 : -1;

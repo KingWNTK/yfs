@@ -125,13 +125,11 @@ int handle_rmdir(single_ptr_msg *msg, char *pathname_buf) {
     char *name;
     int name_len;
     int tmp = get_last_name(pathname_buf, pl, &name, &name_len);
-    if(tmp == -1) {
+    if (tmp == -1) {
         //no last name, can't remove it
         return -1;
     }
     pl = tmp;
-
-
 
     printf("parent path: %.*s\n", pl, pathname_buf);
     //this par is gauranteed to be valid(not 0 or -1) since the whole path is valid
@@ -156,7 +154,7 @@ int hanlde_chdir(single_ptr_msg *msg, char *pathname_buf, int *new_dir, int *reu
     }
 
     *new_dir = dir;
-    *reuse = request_ic(dir)->data.reuse; 
+    *reuse = request_ic(dir)->data.reuse;
     return 0;
 }
 
@@ -165,21 +163,22 @@ int handle_create(single_ptr_msg *msg, char *pathname_buf, int *inode_id, int *r
     int pl = get_pathlen(pathname_buf);
     //double check this parameter here
 
-    if (msg->pathlen != pl || pl == -1) {
+    if (msg->pathlen != pl || pl == -1 || pathname_buf[pl - 1] == '/') {
+        //invalid file pathname
         return -1;
     }
 
     int nd = parse(pathname_buf, pl, msg->current_dir, 0);
+
     if (nd != -1) {
         ic_entry *e = request_ic(nd);
-        if(e->data.type == INODE_REGULAR) {
+        if (e->data.type == INODE_REGULAR) {
             //file name exist, truncate it
             truncate_inode(nd);
             *inode_id = e->inode_id;
             *reuse = e->data.reuse;
             return 0;
-        }
-        else {
+        } else {
             //cannot truncate non-file inodes
             return -1;
         }
@@ -245,6 +244,72 @@ int handle_open(single_ptr_msg *msg, char *pathname_buf, int *inode_id, int *reu
     ic_entry *ic_e = request_ic(nd);
     *inode_id = nd;
     *reuse = ic_e->data.reuse;
+    return 0;
+}
+
+int handle_link(double_ptr_msg *msg, char *pathname_buf, char *new_pathname_buf) {
+    int pl = get_pathlen(pathname_buf), npl = get_pathlen(new_pathname_buf);
+    //double check parameters here
+
+    if (msg->p1_len != pl || pl == -1 || msg->p2_len != npl || npl == -1) {
+        return -1;
+    }
+
+    if(pathname_buf[pl - 1] == '/' || new_pathname_buf[npl - 1] == '/') {
+        //cannot link two directories
+        return -1;
+    }
+
+    int nd = parse(pathname_buf, pl, msg->current_dir, 0);
+    if (nd == -1 || request_ic(nd)->data.type == INODE_DIRECTORY) {
+        //file does not exist or its a directory file,
+        //we can not link to directory files
+        return -1;
+    }
+
+    printf("oldname: %.*s, newname: %.*s\n", pl, pathname_buf, npl, new_pathname_buf);
+
+    //determine whether this is an absolute path
+    int new_cd = new_pathname_buf[0] == '/' ? 1 : msg->current_dir;
+
+    if (new_cd != 1 && (request_ic(new_cd)->data.reuse != msg->reuse || request_ic(new_cd)->data.type != INODE_DIRECTORY)) {
+        //can't use this relative directory
+        return -1;
+    }
+
+    int new_nd = parse(new_pathname_buf, npl, new_cd, 0);
+    if (new_nd != -1) {
+        //it must not exist
+        return -1;
+    }
+
+    char *name;
+    int name_len;
+    int tmp = get_last_name(new_pathname_buf, npl, &name, &name_len);
+    if (tmp == -1) {
+        //can't get last name
+        return -1;
+    }
+    npl = tmp;
+
+    //now we know which directory should we make the new directory in
+    int par = (npl == 0 ? new_cd : parse(new_pathname_buf, npl, new_cd, 0));
+    if (par == -1 || request_ic(par)->data.type != INODE_DIRECTORY) {
+        //the directory does not exist
+        return -1;
+    }
+    
+    //here we done checking the params, now we can do the actual link
+    if (add_dir_entry(par, nd, name, name_len) == -1) {
+        //run out of memory
+        return -1;
+    }
+    free(name);
+    
+    //increase the link count
+    ic_entry *ic_e = request_ic(nd);
+    ic_e->data.nlink++;
+    ic_e->dirty = 1;
 
     return 0;
 }
@@ -253,7 +318,8 @@ int handle_unlink(single_ptr_msg *msg, char *pathname_buf) {
     int pl = get_pathlen(pathname_buf);
     //double check this parameter here
 
-    if (msg->pathlen != pl || pl == -1) {
+    if (msg->pathlen != pl || pl == -1 || pathname_buf[pl - 1] == '/') {
+        //invalid pathname
         return -1;
     }
 
@@ -266,7 +332,7 @@ int handle_unlink(single_ptr_msg *msg, char *pathname_buf) {
     char *name;
     int name_len;
     int tmp = get_last_name(pathname_buf, pl, &name, &name_len);
-    if(tmp == -1) {
+    if (tmp == -1) {
         //no last name, can't remove it
         return -1;
     }
@@ -283,5 +349,28 @@ int handle_read(read_write_msg *msg, int pid) {
 
 int handle_write(read_write_msg *msg, int pid) {
     return write_file(msg->inode_id, msg->offset, msg->buf, msg->size, pid);
+}
+
+int handle_stat(double_ptr_msg *msg, char *pathname_buf, struct Stat *stat) {
+    int pl = get_pathlen(pathname_buf);
+    //double check parameters here
+
+    if (msg->p1_len != pl || pl == -1) {
+        return -1;
+    }
+
+    int nd = parse(pathname_buf, pl, msg->current_dir, 0);
+    if (nd == -1) {
+        //file does not exist
+        return -1;
+    }
+
+    ic_entry *ic_e = request_ic(nd);
+    stat->inum = ic_e->inode_id;
+    stat->type = ic_e->data.type;
+    stat->size = ic_e->data.size;
+    stat->nlink = ic_e->data.nlink;
+
+    return 0;
 }
 #endif

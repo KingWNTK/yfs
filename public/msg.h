@@ -27,6 +27,8 @@
 #define SHUTDOWN_MSG 14
 #define CONTROL_MSG_HIGH 14
 
+#define GETFILEZIE_MSG 15
+
 typedef struct single_ptr_msg {
     int current_dir;
     int reuse;
@@ -57,11 +59,18 @@ typedef struct msg_wrap {
     char padding[16];
 } msg_wrap;
 
+typedef struct get_file_size_msg {
+    int inode_id;
+    int reuse;
+    char padding[24];
+}get_file_size_msg;
+
 
 typedef struct reply_msg {
     int val;
     int inode_id;
     int reuse;
-    char padding[20];
+    int size;
+    char padding[16];
 }reply_msg;
 #endif

@@ -1,5 +1,6 @@
 #include <comp421/filesystem.h>
 #include <comp421/hardware.h>
+#include <comp421/iolib.h>
 #include <comp421/yalnix.h>
 #include <stdio.h>
 #include <string.h>
@@ -127,6 +128,7 @@ void free_list_test() {
 char buf[32];
 //buffer storing the pathname
 char pathname_buf[MAXPATHNAMELEN];
+char new_pathname_buf[MAXPATHNAMELEN];
 
 static int is_valid_cur_dir(int cur_dir, int reuse, char *pathname_buf, int pathlen) {
     //absolute path, always valid
@@ -204,6 +206,7 @@ int main(int argc, char **argv) {
             if (msg.pathlen > 0 && pathname_buf[0] == '/') {
                 //this is absolute path
                 msg.current_dir = 1;
+                msg.reuse = 1;
             }
             if (is_valid_cur_dir(msg.current_dir, msg.reuse, pathname_buf, msg.pathlen)) {
                 switch (wrap->type) {
@@ -228,7 +231,43 @@ int main(int argc, char **argv) {
                 default:
                     break;
                 }
-                print_tree(1, 0, 1);
+            }
+        }
+
+        if (DOUBLE_PTR_MSG_LOW <= wrap->type && wrap->type <= DOUBLE_PTR_MSG_HIGH) {
+            double_ptr_msg msg;
+            //copy the real message here
+            CopyFrom(pid, &msg, wrap->msg, sizeof(msg));
+            memset(pathname_buf, 0, sizeof(pathname_buf));
+            CopyFrom(pid, pathname_buf, msg.p1, msg.p1_len);
+
+            if (msg.p1_len > 0 && pathname_buf[0] == '/') {
+                //this is absolute path
+                msg.current_dir = 1;
+                msg.reuse = 1;
+            }
+
+            printf("current inode: %d, reuse: %d\n", msg.current_dir, request_ic(msg.current_dir)->data.reuse);
+
+            if (is_valid_cur_dir(msg.current_dir, msg.reuse, pathname_buf, msg.p1_len)) {
+                if (wrap->type == LINK_MSG || wrap->type == SYMLINK_MSG) {
+                    memset(new_pathname_buf, 0, sizeof(new_pathname_buf));
+                    CopyFrom(pid, new_pathname_buf, msg.p2, msg.p2_len);
+                    if (wrap->type == LINK_MSG) {
+                        ret = handle_link(&msg, pathname_buf, new_pathname_buf);
+                    } else if (wrap->type == SYMLINK_MSG) {
+                        //TODO
+                    }
+                } else if (wrap->type == STAT_MSG) {
+                    struct Stat s;
+                    ret = handle_stat(&msg, pathname_buf, &s);
+
+                    if (ret != -1) {
+                        CopyTo(pid, msg.p2, &s, sizeof(s));
+                    }
+                } else if (wrap->type == READLINK_MSG) {
+                    //TODO
+                }
             }
         }
 
@@ -236,13 +275,16 @@ int main(int argc, char **argv) {
             read_write_msg msg;
             CopyFrom(pid, &msg, wrap->msg, sizeof(msg));
 
-            if (request_ic(msg.inode_id)->data.type != INODE_FREE) {
+            if (msg.inode_id >= 1 && msg.inode_id <= _num_inodes &&
+                request_ic(msg.inode_id)->data.type != INODE_FREE &&
+                request_ic(msg.inode_id)->data.reuse == msg.reuse) {
                 switch (wrap->type) {
                 case READ_MSG:
                     ret = handle_read(&msg, pid);
                     break;
                 case WRITE_MSG:
-                    if(request_ic(msg.inode_id)->data.type == INODE_DIRECTORY) {
+                    if (request_ic(msg.inode_id)->data.type == INODE_DIRECTORY) {
+                        //can't write the direcotry
                         break;
                     }
                     ret = handle_write(&msg, pid);
@@ -253,9 +295,38 @@ int main(int argc, char **argv) {
             }
         }
 
+        if (wrap->type == SYNC_MSG) {
+            ret = 0;
+            sync_cache();
+        }
+
+        if (wrap->type == SHUTDOWN_MSG) {
+            printf("shutting down yfs server...\n");
+            printf("syncing cache...\n");
+            sync_cache();
+            printf("done syncing\n");
+            printf("the file tree looks like: \n");
+            print_tree(1, 0, 1);
+            printf("going to exit...\n");
+            Exit(0);
+        }
+
+        if (wrap->type == GETFILEZIE_MSG) {
+            get_file_size_msg msg;
+            //copy the real message here
+            CopyFrom(pid, &msg, wrap->msg, sizeof(msg));
+            ic_entry *e = request_ic(msg.inode_id);
+            if (msg.inode_id >= 1 && msg.inode_id <= _num_inodes &&
+                e->data.type != INODE_FREE &&
+                e->data.reuse == msg.reuse) {
+                ret = e->data.size;
+            }
+        }
+
         rep.val = ret;
         //only for test
         sync_cache();
+        // print_tree(1, 0, 1);
         Reply(&rep, pid);
     }
 }
