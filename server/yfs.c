@@ -326,7 +326,7 @@ int main(int argc, char **argv) {
         rep.val = ret;
         //only for test
         sync_cache();
-        // print_tree(1, 0, 1);
+        print_tree(1, 0, 1);
         Reply(&rep, pid);
     }
 }

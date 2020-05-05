@@ -53,7 +53,8 @@ int handle_mkdir(single_ptr_msg *msg, char *pathname_buf) {
     }
 
     int ok = parse(pathname_buf, pl, msg->current_dir, 0);
-    if (ok != -1) {
+    //also don't allow the / at the back
+    if (ok != -1 || pathname_buf[pl - 1] == '/') {
         //path name exist, cannot make it
         return -1;
     }
@@ -61,8 +62,9 @@ int handle_mkdir(single_ptr_msg *msg, char *pathname_buf) {
     char *name;
     int name_len;
     int tmp = get_last_name(pathname_buf, pl, &name, &name_len);
-    if (tmp == -1) {
-        //can't get last name
+    if (tmp == -1 || (name_len == 1 && strncmp(name, ".", name_len) == 0) ||(name_len == 2 && strncmp(name, "..", name_len) == 0)) {
+        //cannot let the name be . or ..
+        free(name);
         return -1;
     }
     pl = tmp;
@@ -112,7 +114,8 @@ int handle_rmdir(single_ptr_msg *msg, char *pathname_buf) {
     int pl = get_pathlen(pathname_buf);
     //double check this parameter here
 
-    if (msg->pathlen != pl || pl == -1) {
+    //also don't allow the / at the back
+    if (msg->pathlen != pl || pl == -1 || pathname_buf[pl - 1] == '/') {
         return -1;
     }
 
@@ -125,8 +128,10 @@ int handle_rmdir(single_ptr_msg *msg, char *pathname_buf) {
     char *name;
     int name_len;
     int tmp = get_last_name(pathname_buf, pl, &name, &name_len);
-    if (tmp == -1) {
+    if (tmp == -1 || (name_len == 1 && strncmp(name, ".", name_len) == 0) ||(name_len == 2 && strncmp(name, "..", name_len) == 0)) {
         //no last name, can't remove it
+        //cannot let the name be . or ..
+        free(name);
         return -1;
     }
     pl = tmp;
@@ -189,6 +194,7 @@ int handle_create(single_ptr_msg *msg, char *pathname_buf, int *inode_id, int *r
     int tmp = get_last_name(pathname_buf, pl, &name, &name_len);
     if (tmp == -1) {
         //can't get last name
+        free(name);
         return -1;
     }
     pl = tmp;
@@ -286,8 +292,9 @@ int handle_link(double_ptr_msg *msg, char *pathname_buf, char *new_pathname_buf)
     char *name;
     int name_len;
     int tmp = get_last_name(new_pathname_buf, npl, &name, &name_len);
-    if (tmp == -1) {
-        //can't get last name
+    if (tmp == -1 || (name_len == 1 && strncmp(name, ".", name_len) == 0) ||(name_len == 2 && strncmp(name, "..", name_len) == 0)) {
+        //cannot let the name be . or ..
+        free(name);
         return -1;
     }
     npl = tmp;
@@ -334,6 +341,7 @@ int handle_unlink(single_ptr_msg *msg, char *pathname_buf) {
     int tmp = get_last_name(pathname_buf, pl, &name, &name_len);
     if (tmp == -1) {
         //no last name, can't remove it
+        free(name);
         return -1;
     }
     pl = tmp;
