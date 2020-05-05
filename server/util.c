@@ -330,7 +330,7 @@ int add_dir_entry(int inode_id, int inum, char *name, int len) {
     if (!ok) {
         ret = append_dir_entry(inode_id, inum, name, len);
     }
-    printf("append ret: %d, len: %d, name: %.*s\n", ret, len, len, name);
+    // printf("append ret: %d, len: %d, name: %.*s\n", ret, len, len, name);
     //return -1 if run out of blocks
     return ret;
 }
@@ -582,7 +582,7 @@ int write_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
     while (offset >= BLOCKSIZE) {
         block_idx++;
         if (block_idx >= numb) {
-            printf("putted hole\n");
+            // printf("putted hole\n");
             //need to put a hole
             if (append_block(ic_e->inode_id, 0) == -1) {
                 //indirect block full
@@ -628,7 +628,7 @@ int write_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
                 return written;
             }
             if (cur == -1) {
-                printf("appended\n");
+                // printf("appended\n");
                 appended = 1;
             }
             cur = b;
@@ -638,7 +638,7 @@ int write_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
         //how many bytes are we going to write to this page
         int size = BLOCKSIZE - offset > buf_len ? buf_len : BLOCKSIZE - offset;
         int cf = CopyFrom(pid, bc_e->data + offset, buf, size);
-        printf("cf: %d, util wrote: %.*s\n", cf, size, bc_e->data + offset);
+        // printf("cf: %d, util wrote: %.*s\n", cf, size, bc_e->data + offset);
         bc_e->dirty = 1;
         if (appended) {
             //if we appended a new page, we'll need to increase the size
@@ -660,7 +660,7 @@ int write_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
         written += size;
     }
 
-    printf("file size: %d\n", ic_e->data.size);
+    // printf("file size: %d\n", ic_e->data.size);
     return written;
 }
 

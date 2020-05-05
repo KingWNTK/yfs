@@ -201,7 +201,7 @@ int main(int argc, char **argv) {
             memset(pathname_buf, 0, sizeof(pathname_buf));
             CopyFrom(pid, pathname_buf, msg.path, msg.pathlen);
 
-            printf("current inode: %d, reuse: %d\n", msg.current_dir, request_ic(msg.current_dir)->data.reuse);
+            // printf("current inode: %d, reuse: %d\n", msg.current_dir, request_ic(msg.current_dir)->data.reuse);
             // printf("%d %d\n", request_ic(msg.current_dir)->data.reuse, request_ic(msg.current_dir)->data.type);
             if (msg.pathlen > 0 && pathname_buf[0] == '/') {
                 //this is absolute path
@@ -241,13 +241,7 @@ int main(int argc, char **argv) {
             memset(pathname_buf, 0, sizeof(pathname_buf));
             CopyFrom(pid, pathname_buf, msg.p1, msg.p1_len);
 
-            if (msg.p1_len > 0 && pathname_buf[0] == '/') {
-                //this is absolute path
-                msg.current_dir = 1;
-                msg.reuse = 1;
-            }
-
-            printf("current inode: %d, reuse: %d\n", msg.current_dir, request_ic(msg.current_dir)->data.reuse);
+            // printf("current inode: %d, reuse: %d\n", msg.current_dir, request_ic(msg.current_dir)->data.reuse);
 
             if (is_valid_cur_dir(msg.current_dir, msg.reuse, pathname_buf, msg.p1_len)) {
                 if (wrap->type == LINK_MSG || wrap->type == SYMLINK_MSG) {
@@ -260,6 +254,11 @@ int main(int argc, char **argv) {
                     }
                 } else if (wrap->type == STAT_MSG) {
                     struct Stat s;
+                    if (msg.p1_len > 0 && pathname_buf[0] == '/') {
+                        //this is absolute path
+                        msg.current_dir = 1;
+                        msg.reuse = 1;
+                    }
                     ret = handle_stat(&msg, pathname_buf, &s);
 
                     if (ret != -1) {
@@ -325,8 +324,8 @@ int main(int argc, char **argv) {
 
         rep.val = ret;
         //only for test
-        sync_cache();
-        print_tree(1, 0, 1);
+        // sync_cache();
+        // print_tree(1, 0, 1);
         Reply(&rep, pid);
     }
 }

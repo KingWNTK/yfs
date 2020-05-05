@@ -77,15 +77,15 @@ static int get_new_fd() {
 }
 
 int Open(char *pathname) {
+    int pathlen = get_pathlen(pathname);
+    if (pathlen == -1) {
+        return ERROR;
+    }
     int fd = get_new_fd();
     if (fd == -1) {
         return ERROR;
     }
 
-    int pathlen = get_pathlen(pathname);
-    if (pathlen == -1) {
-        return ERROR;
-    }
     single_ptr_msg msg;
     build_single_ptr_msg(&msg, pathname, pathlen);
 
@@ -99,6 +99,8 @@ int Open(char *pathname) {
         return fd;
     }
 
+    files[fd].used = 0;
+    files_cnt++;
     return ERROR;
 }
 
@@ -106,6 +108,7 @@ int Close(int fd) {
     if (fd >= 0 && fd < MAX_OPEN_FILES && files[fd].used == 1) {
         files[fd].used = 0;
         files_cnt--;
+        return 0;
     }
     return ERROR;
 }
@@ -115,18 +118,20 @@ int Create(char *pathname) {
     if (pathlen == -1) {
         return ERROR;
     }
-    single_ptr_msg msg;
-    build_single_ptr_msg(&msg, pathname, pathlen);
-
-    reply_msg rep = send_msg(&msg, CREATE_MSG);
-    printf("create reply: %d\n", rep.val);
-    if (rep.val == -1) {
-        return ERROR;
-    }
     int fd = get_new_fd();
     if (fd == -1) {
         return ERROR;
     }
+    single_ptr_msg msg;
+    build_single_ptr_msg(&msg, pathname, pathlen);
+
+    reply_msg rep = send_msg(&msg, CREATE_MSG);
+    if (rep.val == -1) {
+        files[fd].used = 0;
+        files_cnt--;
+        return ERROR;
+    }
+    
 
     files[fd].used = 1;
     files[fd].inode_id = rep.inode_id;
@@ -148,7 +153,6 @@ int Read(int fd, void *buf, int size) {
     msg.offset = files[fd].offset_begin;
     msg.reuse = files[fd].reuse;
     reply_msg rep = send_msg(&msg, READ_MSG);
-    printf("read reply: %d\n", rep.val);
     // printf("read: %.*s\n", rep.val, buf);
     if(rep.val > 0) {
         files[fd].offset_begin += rep.val;
@@ -168,7 +172,6 @@ int Write(int fd, void *buf, int size) {
     msg.offset = files[fd].offset_begin;
     msg.reuse = files[fd].reuse;
     reply_msg rep = send_msg(&msg, WRITE_MSG);
-    printf("write reply: %d\n", rep.val);
     if(rep.val > 0) {
         files[fd].offset_begin += rep.val;
     }
@@ -195,7 +198,13 @@ int Seek(int fd, int offset, int whence) {
         files[fd].offset_begin += offset;
         break;
     case SEEK_END: {
-        reply_msg rep = send_msg(NULL, GETFILEZIE_MSG);
+        single_ptr_msg msg;
+        msg.current_dir = files[fd].inode_id;
+        msg.reuse = files[fd].reuse;
+        reply_msg rep = send_msg(&msg, GETFILEZIE_MSG);
+        if(rep.val == -1) {
+            return ERROR;
+        }
         int file_size = rep.val;
         if (file_size + offset < 0) {
             return ERROR;
@@ -206,6 +215,7 @@ int Seek(int fd, int offset, int whence) {
     default:
         return ERROR;
     }
+    return files[fd].offset_begin;
 }
 
 int Link(char *oldname, char *newname) {
@@ -217,7 +227,6 @@ int Link(char *oldname, char *newname) {
     build_double_ptr_msg(&msg, oldname, pathlen, newname, new_pathlen);
 
     reply_msg rep = send_msg(&msg, LINK_MSG);
-    printf("link reply: %d\n", rep.val);
     return rep.val;
 }
 
@@ -230,7 +239,6 @@ int Unlink(char *pathname) {
     build_single_ptr_msg(&msg, pathname, pathlen);
 
     reply_msg rep = send_msg(&msg, UNLINK_MSG);
-    printf("unlink reply: %d\n", rep.val);
     return rep.val;
 }
 
@@ -253,7 +261,6 @@ int MkDir(char *pathname) {
     build_single_ptr_msg(&msg, pathname, pathlen);
 
     reply_msg rep = send_msg(&msg, MKDIR_MSG);
-    printf("mkdir reply: %d\n", rep.val);
     return rep.val;
 }
 
@@ -266,7 +273,6 @@ int RmDir(char *pathname) {
     build_single_ptr_msg(&msg, pathname, pathlen);
 
     reply_msg rep = send_msg(&msg, RMDIR_MSG);
-    printf("rmdir reply: %d\n", rep.val);
     return rep.val;
 }
 
@@ -279,15 +285,15 @@ int ChDir(char *pathname) {
     build_single_ptr_msg(&msg, pathname, pathlen);
 
     reply_msg rep = send_msg(&msg, CHDIR_MSG);
-    printf("chdir reply: %d\n", rep.val);
 
     if (rep.val == 0) {
         cur_dir = rep.inode_id;
         cur_dir_reuse = rep.reuse;
-        printf("new dir: %d, reuse: %d\n", cur_dir, cur_dir_reuse);
+        // printf("new dir: %d, reuse: %d\n", cur_dir, cur_dir_reuse);
     }
     return rep.val;
 }
+
 int Stat(char *pathname, struct Stat *s) {
     int pathlen = get_pathlen(pathname);
     if (pathlen == -1) {
@@ -297,7 +303,6 @@ int Stat(char *pathname, struct Stat *s) {
     build_double_ptr_msg(&msg, pathname, pathlen, s, 0);
 
     reply_msg rep = send_msg(&msg, STAT_MSG);
-    printf("stat reply: %d\n", rep.val);
     return rep.val;
 }
 

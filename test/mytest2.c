@@ -26,16 +26,26 @@ char *to_string(int x) {
  * This test make sure the indirect blocks are loaded properly
  */
 int main(int argc, void **argv) {
-    // int i;
-    // for(i = 1; i <= 300; i++) {
-    //     char *s = to_string(i);
-    //     MkDir(s);
-    //     free(s);
-    // }
-    // char *s = to_string(280);
-    // ChDir(s);
-    // free(s);
-    char buf[1024];
-    Read(1, buf, 1024);
+    MkDir("/test");
+    Create("/test/a");
+    int i;
+    ChDir("/test");
+    for(i = 1; i <= 250; i++) {
+        char *s = to_string(i);
+        Link("/test/a", s);
+        free(s);
+    }
+    char *s = to_string(2);
+    ChDir("/..");
+    Unlink("/1");
+    Unlink("/test/2");
+    Unlink("/test/3");
+    ChDir("../././///test");
+    Unlink("./4");
+    Unlink("./2");
+    Unlink("/test/5");
+    RmDir("test");
+    Shutdown();
+    free(s);
     return 0;
 }

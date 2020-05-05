@@ -62,7 +62,7 @@ int handle_mkdir(single_ptr_msg *msg, char *pathname_buf) {
     char *name;
     int name_len;
     int tmp = get_last_name(pathname_buf, pl, &name, &name_len);
-    if (tmp == -1 || (name_len == 1 && strncmp(name, ".", name_len) == 0) ||(name_len == 2 && strncmp(name, "..", name_len) == 0)) {
+    if (tmp == -1 || name_len > DIRNAMELEN || (name_len == 1 && strncmp(name, ".", name_len) == 0) ||(name_len == 2 && strncmp(name, "..", name_len) == 0)) {
         //cannot let the name be . or ..
         free(name);
         return -1;
@@ -71,7 +71,7 @@ int handle_mkdir(single_ptr_msg *msg, char *pathname_buf) {
 
     //now we know which directory should we make the new directory in
     int par = (pl == 0 ? msg->current_dir : parse(pathname_buf, pl, msg->current_dir, 0));
-    printf("parent path: %.*s\n", pl, pathname_buf);
+    // printf("parent path: %.*s\n", pl, pathname_buf);
     if (par == -1 || request_ic(par)->data.type != INODE_DIRECTORY) {
         //the directory does not exist
         return -1;
@@ -136,7 +136,7 @@ int handle_rmdir(single_ptr_msg *msg, char *pathname_buf) {
     }
     pl = tmp;
 
-    printf("parent path: %.*s\n", pl, pathname_buf);
+    // printf("parent path: %.*s\n", pl, pathname_buf);
     //this par is gauranteed to be valid(not 0 or -1) since the whole path is valid
     int par = (pl == 0 ? msg->current_dir : parse(pathname_buf, pl, msg->current_dir, 0));
     return remove_dir_entry(par, name, name_len);
@@ -152,7 +152,7 @@ int hanlde_chdir(single_ptr_msg *msg, char *pathname_buf, int *new_dir, int *reu
     }
 
     int dir = parse(pathname_buf, pl, msg->current_dir, 0);
-    printf("chdir: %d\n", dir);
+    // printf("chdir: %d\n", dir);
     if (dir == -1 || request_ic(dir)->data.type != INODE_DIRECTORY) {
         //its not a directory
         return -1;
@@ -192,7 +192,7 @@ int handle_create(single_ptr_msg *msg, char *pathname_buf, int *inode_id, int *r
     char *name;
     int name_len;
     int tmp = get_last_name(pathname_buf, pl, &name, &name_len);
-    if (tmp == -1) {
+    if (tmp == -1 || name_len > DIRNAMELEN) {
         //can't get last name
         free(name);
         return -1;
@@ -201,7 +201,7 @@ int handle_create(single_ptr_msg *msg, char *pathname_buf, int *inode_id, int *r
 
     //now we know which directory should we make the new directory in
     int par = (pl == 0 ? msg->current_dir : parse(pathname_buf, pl, msg->current_dir, 0));
-    printf("parent path: %.*s\n", pl, pathname_buf);
+    // printf("parent path: %.*s\n", pl, pathname_buf);
     if (par == -1 || request_ic(par)->data.type != INODE_DIRECTORY) {
         //the directory does not exist
         return -1;
@@ -266,17 +266,20 @@ int handle_link(double_ptr_msg *msg, char *pathname_buf, char *new_pathname_buf)
         return -1;
     }
 
-    int nd = parse(pathname_buf, pl, msg->current_dir, 0);
+    int cd = pathname_buf[0] == '/' ? 1 : msg->current_dir;
+
+    int nd = parse(pathname_buf, pl, cd, 0);
     if (nd == -1 || request_ic(nd)->data.type == INODE_DIRECTORY) {
         //file does not exist or its a directory file,
         //we can not link to directory files
         return -1;
     }
 
-    printf("oldname: %.*s, newname: %.*s\n", pl, pathname_buf, npl, new_pathname_buf);
+    // printf("oldname: %.*s, newname: %.*s\n", pl, pathname_buf, npl, new_pathname_buf);
 
     //determine whether this is an absolute path
     int new_cd = new_pathname_buf[0] == '/' ? 1 : msg->current_dir;
+
 
     if (new_cd != 1 && (request_ic(new_cd)->data.reuse != msg->reuse || request_ic(new_cd)->data.type != INODE_DIRECTORY)) {
         //can't use this relative directory
@@ -292,7 +295,7 @@ int handle_link(double_ptr_msg *msg, char *pathname_buf, char *new_pathname_buf)
     char *name;
     int name_len;
     int tmp = get_last_name(new_pathname_buf, npl, &name, &name_len);
-    if (tmp == -1 || (name_len == 1 && strncmp(name, ".", name_len) == 0) ||(name_len == 2 && strncmp(name, "..", name_len) == 0)) {
+    if (tmp == -1 || name_len > DIRNAMELEN || (name_len == 1 && strncmp(name, ".", name_len) == 0) ||(name_len == 2 && strncmp(name, "..", name_len) == 0)) {
         //cannot let the name be . or ..
         free(name);
         return -1;
