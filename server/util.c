@@ -365,7 +365,7 @@ int remove_dir_entry(int inode_id, char *name, int len) {
                     e->inum = 0;
                     wrote_iter(&iter);
 
-                    printf("before clean\n");
+                    // printf("before clean\n");
                     //clean this inode
                     clean_inode(ic_e->inode_id);
 
@@ -535,13 +535,17 @@ int read_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
         }
 
         int size = BLOCKSIZE - offset > buf_len ? buf_len : BLOCKSIZE - offset;
+        int ct;
         if (size >= ic_e->data.size - size_passed) {
             //reached end of file
             if (cur) {
                 bc_entry *bc_e = request_bc(cur);
-                CopyTo(pid, buf, bc_e->data + offset, ic_e->data.size - size_passed);
+                ct = CopyTo(pid, buf, bc_e->data + offset, ic_e->data.size - size_passed);
             } else {
-                CopyTo(pid, buf, hole, ic_e->data.size - size_passed);
+                ct = CopyTo(pid, buf, hole, ic_e->data.size - size_passed);
+            }
+            if(ct == -1) {
+                return -1;
             }
 
             read += ic_e->data.size - size_passed;
@@ -549,9 +553,12 @@ int read_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
         }
         if(cur) {
             bc_entry *bc_e = request_bc(cur);
-            CopyTo(pid, buf, bc_e->data + offset, size);
+            ct = CopyTo(pid, buf, bc_e->data + offset, size);
         } else {
-            CopyTo(pid, buf, hole, size);
+            ct = CopyTo(pid, buf, hole, size);
+        }
+        if(ct == -1) {
+            return -1;
         }
         block_idx++;
         offset = 0;
@@ -596,7 +603,14 @@ int write_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
             // size_inced += BLOCKSIZE;
             ic_e->dirty = 1;
         } else if(block_idx == numb - 1) {
-            ic_e->data.size += BLOCKSIZE - last_block_bytes(ic_e->data.size);
+            int lb = last_block_bytes(ic_e->data.size);
+            ic_e->data.size += BLOCKSIZE - lb;
+            //this is also part of the hole;
+            if(BLOCKSIZE - lb > 0) {
+                bc_entry *bc_e = request_bc(block_idx);
+                memset(bc_e->data + lb, 0, BLOCKSIZE - lb);
+                bc_e->dirty = 1;
+            }
             ic_e->dirty = 1;
         }
         offset -= BLOCKSIZE;
@@ -638,9 +652,17 @@ int write_file(int inode_id, int offset, char *buf, int buf_len, int pid) {
         //how many bytes are we going to write to this page
         int size = BLOCKSIZE - offset > buf_len ? buf_len : BLOCKSIZE - offset;
         int cf = CopyFrom(pid, bc_e->data + offset, buf, size);
+        if(cf == -1) {
+            return -1;
+        }
         // printf("cf: %d, util wrote: %.*s\n", cf, size, bc_e->data + offset);
         bc_e->dirty = 1;
         if (appended) {
+            if(offset) {
+                //this is also part of the hole
+                memset(bc_e->data, 0, offset);
+                bc_e->dirty = 1;
+            }
             //if we appended a new page, we'll need to increase the size
             ic_e->data.size += size + offset;
             ic_e->dirty = 1;

@@ -25,6 +25,9 @@ char *to_string(int x) {
 /**
  * This test make sure the indirect blocks are loaded properly
  */
+static void test(int a, int b) {
+    printf("%d, should be %d\n", a, b);
+}
 int main(int argc, void **argv) {
     MkDir("/test");
     Create("/test/a");
@@ -44,7 +47,7 @@ int main(int argc, void **argv) {
     Unlink("./4");
     Unlink("./2");
     Unlink("/test/5");
-    RmDir("test");
+    test(RmDir("test"), -1);
     Shutdown();
     free(s);
     return 0;

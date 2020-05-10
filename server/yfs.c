@@ -304,8 +304,8 @@ int main(int argc, char **argv) {
             printf("syncing cache...\n");
             sync_cache();
             printf("done syncing\n");
-            printf("the file tree looks like: \n");
-            print_tree(1, 0, 1);
+            // printf("the file tree looks like: \n");
+            // print_tree(1, 0, 1);
             printf("going to exit...\n");
             Exit(0);
         }

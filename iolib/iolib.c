@@ -41,9 +41,12 @@ static reply_msg send_msg(void *msg, int type) {
     msg_wrap *wrap = (msg_wrap *)malloc(sizeof(msg_wrap));
     wrap->type = type;
     wrap->msg = msg;
-    Send(wrap, -FILE_SERVER);
+    int s = Send(wrap, -FILE_SERVER);
     reply_msg rep = *(reply_msg *)wrap;
     free(wrap);
+    if(s == ERROR) {
+        rep.val = ERROR;
+    }
     return rep;
 }
 
